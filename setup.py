@@ -22,20 +22,20 @@ Core abilities of nctoolkit include:
   - Calculating vertical statistics for the likes of oceanic data
   - Calculating ensemble statistics
 
-Operation of the package requires the installation of Climate Data Operators (CDO). This is the computational backend for most of the methods used. No knowledge of CDO is required to use nctoolkit. A couple of methods provide users with the option of using netCDF Operators (NCO) as a backend. Guidance for how to install the backends are available `here <https://pmlmodelling.github.io/nctoolkit/installing.html>`__.
+Operation of the package requires the installation of Climate Data Operators (CDO). This is the computational backend for most of the methods used. No knowledge of CDO is required to use nctoolkit. A couple of methods provide users with the option of using netCDF Operators (NCO) as a backend. Guidance for how to install the backends are available `here <https://plymouthmarinelaboratory.github.io/nctoolkit/installing.html>`__.
 
 The package is designed for both intensive bulk processing of NetCDF files and interactive Jupyter notebook analysis. It features an interactive plotting feature which allows users to view the contents of NetCDF files either within Jupyter notebooks or a web browser.
 
 Plotting requires the use of cartopy, which has some additional system dependencies. Follow the instructions `here <https://scitools.org.uk/cartopy/docs/latest/installing.html>`__ to install them.
 
-Documentation and a user guide are available `here <https://pmlmodelling.github.io/nctoolkit/>`__.
+Documentation and a user guide are available `here <https://plymouthmarinelaboratory.github.io/nctoolkit/>`__.
 
 """
 
 PROJECT_URLS = {
-    "Bug Tracker": "https://github.com/pmlmodelling/nctoolkit/issues",
-    "Documentation": "https://pmlmodelling.github.io/nctoolkit/",
-    "Source Code": "https://github.com/pmlmodelling/nctoolkit",
+    "Bug Tracker": "https://github.com/PlymouthMarineLaboratory/nctoolkit/issues",
+    "Documentation": "https://plymouthmarinelaboratory.github.io/nctoolkit/",
+    "Source Code": "https://github.com/PlymouthMarineLaboratory/nctoolkit",
 }
 
 extras_require: dict() = dict()
@@ -63,7 +63,7 @@ setup(name='nctoolkit',
     ],
 
       project_urls=PROJECT_URLS,
-      url = "https://github.com/pmlmodelling/nctoolkit",
+      url = "https://github.com/PlymouthMarineLaboratory/nctoolkit",
       author='Robert Wilson',
       maintainer='Robert Wilson',
       author_email='rwi@pml.ac.uk',

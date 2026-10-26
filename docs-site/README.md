@@ -5,7 +5,7 @@ main nctoolkit repository), published to GitHub Pages. Plain static
 HTML/CSS/JS — no build step to author or preview it (the only generated
 artifact is the search index, built in CI - see "Search" below). Layout, theming and the
 archiving approach are carried over from the sister project
-[OceanVal's docs site](https://github.com/pmlmodelling/oceanVal/tree/main/docs-site),
+[OceanVal's docs site](https://github.com/PlymouthMarineLaboratory/oceanVal/tree/main/docs-site),
 for a consistent look across PML's Marine Systems Modelling group tools.
 
 ## Structure
@@ -196,7 +196,7 @@ To turn it on:
    (not "Deploy from a branch").
 2. Push to `master` (or run the workflow manually from the **Actions** tab —
    it has `workflow_dispatch` enabled). The site publishes to
-   `https://pmlmodelling.github.io/nctoolkit/`.
+   `https://plymouthmarinelaboratory.github.io/nctoolkit/`.
 
 The included `.nojekyll` file stops GitHub Pages from running its default
 Jekyll processing, which isn't needed here and can interfere with files/paths

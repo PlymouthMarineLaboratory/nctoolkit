@@ -1,5 +1,5 @@
 // This documentation site is archived - NCToolkit's docs have moved to
-// https://pmlmodelling.github.io/nctoolkit/. Inserted via html_js_files
+// https://plymouthmarinelaboratory.github.io/nctoolkit/. Inserted via html_js_files
 // (see conf.py) rather than a theme template override, so it shows on
 // every page regardless of whether it was built from a .rst file or a
 // notebook (nbsphinx pages don't go through the same reST pipeline that
@@ -16,8 +16,8 @@
     );
     banner.innerHTML =
       "This site is archived and no longer updated &mdash; NCToolkit's docs have moved. " +
-      'See <a href="https://pmlmodelling.github.io/nctoolkit/" style="font-weight: 600;">' +
-      "pmlmodelling.github.io/nctoolkit</a> for the current quickstart, user guide and API reference.";
+      'See <a href="https://plymouthmarinelaboratory.github.io/nctoolkit/" style="font-weight: 600;">' +
+      "plymouthmarinelaboratory.github.io/nctoolkit</a> for the current quickstart, user guide and API reference.";
 
     var target =
       document.querySelector("[itemprop='articleBody']") ||

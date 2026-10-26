@@ -225,7 +225,7 @@ def render_section(title, intro, entries, note=None) -> str:
 
 CREATING_VARIABLES_NOTE = (
     'For more examples, see the '
-    '<a href="https://pmlmodelling.github.io/nctoolkit/guide.html">NCToolkit website</a>.'
+    '<a href="https://plymouthmarinelaboratory.github.io/nctoolkit/guide.html">NCToolkit website</a>.'
 )
 
 
@@ -282,7 +282,7 @@ def build_html(version: str) -> str:
     size: A4 landscape;
     margin: 14mm 12mm 10mm 12mm;
     @bottom-right {{
-      content: "nctoolkit v{esc(version)} \\2014 pmlmodelling.github.io/nctoolkit";
+      content: "nctoolkit v{esc(version)} \\2014 plymouthmarinelaboratory.github.io/nctoolkit";
       font-size: 7.5pt;
       color: #7c94a0;
       font-family: "Helvetica Neue", Arial, sans-serif;

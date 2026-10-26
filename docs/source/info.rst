@@ -16,7 +16,7 @@ and European Research Council (ERC) funded research projects.
 Bugs and issues
 ------------------
 
-If you identify bugs or issues with the package please raise an issue at PML's Marine Systems Modelling group's GitHub page `here <https://github.com/pmlmodelling/nctoolkit/issues>`__ or contact nctoolkit's creator at rwi@pml.ac.uk.
+If you identify bugs or issues with the package please raise an issue at PML's Marine Systems Modelling group's GitHub page `here <https://github.com/PlymouthMarineLaboratory/nctoolkit/issues>`__ or contact nctoolkit's creator at rwi@pml.ac.uk.
 
 
 Contributions welcome

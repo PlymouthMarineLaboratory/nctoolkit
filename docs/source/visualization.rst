@@ -92,7 +92,7 @@ Currently, ``pub_plot`` is restricted to work with regular lon/lat grids. A limi
 Plotting internals
 ---------------------
 Plotting is carried out using the ncplot package. ncplot will look at the dataset and identify a suitable plotting method. This is carried out internally using hvplot. If you come across any errors, 
-please raise an issue `here <https://github.com/pmlmodelling/ncplot>`__.
+please raise an issue `here <https://github.com/PlymouthMarineLaboratory/ncplot>`__.
 
 This is a package that aims to deliver plotting for rapid exploratory analysis, and therefore it does not offer a large number of customizations. However, because it is built on hvplot, you can use most of the customization options available in hvplot, which are detailed `here <https://hvplot.holoviz.org/user_guide/Customization.html>`__. Arguments such as `title`, `logz` and `clim` can be passed to `plot` and will be automatically passed to the hvplot method used
 .

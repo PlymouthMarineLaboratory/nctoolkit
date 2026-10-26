@@ -16,7 +16,7 @@ nctoolkit will work with more or less any structured horizontal grid, so long as
 
 It provides limited supported for unstructured horizontal grids. These grids are often idiosyncratic and require special treatment and therefore only limited functionality is available in CDO.
 However, interpolation via the nearest neighbour method is supported. In some cases, the metadata of the netCDF file may need to be changed to allow CDO to work with the data. 
-So, if you are working with unstructured data and running into problems, reach out to us at the `nctoolkit Discussions page <https://github.com/pmlmodelling/nctoolkit/discussions>`__).
+So, if you are working with unstructured data and running into problems, reach out to us at the `nctoolkit Discussions page <https://github.com/PlymouthMarineLaboratory/nctoolkit/discussions>`__).
 
 In some cases methods may not be able to provide a fully accurate answer due to deficiencies in the underlying file metadata. 
 For example, the `spatial_mean` method needs to be able to calculate the area of each grid cell, but sometimes data providers fail to include this information in their files. 
@@ -30,7 +30,7 @@ Occasionally, you may run into problems due to deficiencies in the raw netCDF fi
 For example, for vertical averaging to be totally accurate, the thickness of each vertical level is required.
 However, sometimes files do not contain this information, and there is no way to infer it. 
 At present, nctoolkit is focused on analyzing data, not correcting, and therefore is not designed to fix issues in the raw files. 
-However, if you run into any contact us `here <https://github.com/pmlmodelling/nctoolkit/discussions>`__) and we can help you.
+However, if you run into any contact us `here <https://github.com/PlymouthMarineLaboratory/nctoolkit/discussions>`__) and we can help you.
 
 The time axis
 ------------------
