@@ -88,6 +88,386 @@ def _legend_label(ds):
     return label
 
 
+def _coord_score(x, axis):
+    """How much netCDF variable x looks like a longitude (axis="lon") or latitude (axis="lat")"""
+    standard_name = getattr(x, "standard_name", None)
+    # rotated pole and projected coordinates are not longitudes or latitudes
+    if standard_name in [
+        "grid_longitude",
+        "grid_latitude",
+        "projection_x_coordinate",
+        "projection_y_coordinate",
+    ]:
+        return 0
+    if standard_name == {"lon": "longitude", "lat": "latitude"}[axis]:
+        return 3
+    units = str(getattr(x, "units", "")).lower().replace(" ", "").replace("_", "")
+    direction = {"lon": ["east", "e"], "lat": ["north", "n"]}[axis]
+    if units in [f"degree{s}{d}" for s in ["s", ""] for d in direction]:
+        return 2
+    if axis in x.name.lower():
+        return 1
+    return 0
+
+
+def _coords_from_grid_mapping(nc, x):
+    """
+    2D lon/lat for a variable on a projected or rotated pole grid without them,
+    using its CF grid_mapping and 1D x/y coordinates
+    """
+    gm = getattr(x, "grid_mapping", None)
+    if gm not in nc.variables:
+        return None
+    axes = dict()
+    for d in x.dimensions:
+        if d in nc.variables and nc.variables[d].ndim == 1:
+            sn = getattr(nc.variables[d], "standard_name", "")
+            if sn in ["projection_x_coordinate", "grid_longitude"]:
+                axes["x"] = d
+            if sn in ["projection_y_coordinate", "grid_latitude"]:
+                axes["y"] = d
+    if len(axes) < 2:
+        return None
+    try:
+        import pyproj
+
+        gm = nc.variables[gm]
+        crs = pyproj.CRS.from_cf({k: gm.getncattr(k) for k in gm.ncattrs()})
+        xx = np.asarray(nc.variables[axes["x"]][:], dtype=float)
+        yy = np.asarray(nc.variables[axes["y"]][:], dtype=float)
+        if crs.is_projected:
+            units = str(getattr(nc.variables[axes["x"]], "units", "m")).lower()
+            scale = {"km": 1000.0, "kilometres": 1000.0, "kilometers": 1000.0}
+            xx = xx * scale.get(units, 1.0)
+            yy = yy * scale.get(units, 1.0)
+        xx, yy = np.meshgrid(xx, yy)
+        transformer = pyproj.Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+        lon, lat = transformer.transform(xx, yy)
+    except Exception:
+        return None
+    if [d for d in x.dimensions if d in axes.values()] != [axes["y"], axes["x"]]:
+        lon = lon.T
+        lat = lat.T
+    return np.ma.masked_invalid(lon), np.ma.masked_invalid(lat)
+
+
+def _find_triangles(nc, node_dim, n_nodes, var=None):
+    """
+    Triangles (n, 3), with 0-based node indices, of an unstructured mesh with values
+    on its nodes. These come from the UGRID face_node_connectivity, or from an
+    integer variable of 3 or 4 node indices per element (e.g. FVCOM nv, ADCIRC
+    element). Quadrilaterals are split into two triangles
+    """
+    conn = None
+    mesh = getattr(nc.variables[var], "mesh", None) if var in nc.variables else None
+    if mesh in nc.variables:
+        name = getattr(nc.variables[mesh], "face_node_connectivity", None)
+        if name in nc.variables:
+            conn = nc.variables[name]
+    if conn is None:
+        for name in nc.variables:
+            v = nc.variables[name]
+            if (
+                v.ndim == 2
+                and np.issubdtype(v.dtype, np.integer)
+                and node_dim not in v.dimensions
+                and min(v.shape) in [3, 4]
+                and max(v.shape) > 4
+            ):
+                conn = v
+                break
+    if conn is None:
+        return None
+
+    start = getattr(conn, "start_index", None)
+    tri = np.ma.filled(conn[:], -1).astype(np.int64)
+    if tri.shape[0] in [3, 4] and tri.shape[1] not in [3, 4]:
+        tri = tri.T
+    fill = getattr(conn, "_FillValue", None)
+    if fill is not None:
+        tri[tri == fill] = -1
+    if start is None:
+        # Fortran models (FVCOM, ADCIRC, SCHISM, SHYFEM) number their nodes from 1
+        valid = tri[tri >= 0]
+        if valid.size == 0:
+            return None
+        start = 1 if valid.max() >= n_nodes or valid.min() > 0 else 0
+    tri = np.where(tri >= start, tri - int(start), -1)
+    tri[tri >= n_nodes] = -1
+
+    if tri.shape[1] == 4:
+        quad = tri[:, 3] >= 0
+        tri = np.concatenate([tri[:, :3], tri[quad][:, [0, 2, 3]]])
+    return tri[(tri >= 0).all(axis=1)]
+
+
+def _find_coords(nc_file, var, mesh_files=None):
+    """
+    Find the lon/lat coordinates of var. Returns a dict with lon, lat, lon_bnds,
+    lat_bnds, triangles and the grid kind: "regular", "curvilinear", "unstructured"
+    (cells with bounds) or "nodes" (values on the nodes of a triangular mesh).
+    If the mesh connectivity of "nodes" grids is missing from nc_file, mesh_files
+    are searched for it
+    """
+    grid = dict(lon_bnds=None, lat_bnds=None, triangles=None)
+    with Dataset(nc_file) as nc:
+        x = nc.variables[var]
+        # look at the variable's coordinates first, then anything on its dimensions
+        candidates = getattr(x, "coordinates", "").split() + list(x.dimensions)
+        candidates += [c for c in nc.variables if c not in candidates and c != var]
+        candidates = [c for c in candidates if c in nc.variables]
+        found = dict()
+        for axis in ["lon", "lat"]:
+            best = 0
+            for c in candidates:
+                coord = nc.variables[c]
+                # coordinates must lie on the dimensions of the variable
+                if coord.ndim > 0 and set(coord.dimensions).issubset(x.dimensions):
+                    score = _coord_score(coord, axis)
+                    if score > best:
+                        found[axis] = coord
+                        best = score
+
+        if "lon" not in found or "lat" not in found:
+            coords = _coords_from_grid_mapping(nc, x)
+            if coords is None:
+                raise ValueError(
+                    "Unable to parse coordinates. Please check if dataset has a lonlat grid!"
+                )
+            grid.update(lon=coords[0], lat=coords[1], kind="curvilinear")
+            return grid
+
+        lon_var = found["lon"]
+        lat_var = found["lat"]
+        grid["lon"] = lon_var[:]
+        grid["lat"] = lat_var[:]
+
+        if lon_var.ndim == 1 and lat_var.ndim == 1:
+            if lon_var.dimensions != lat_var.dimensions:
+                grid["kind"] = "regular"
+                return grid
+            for coord, key in [(lon_var, "lon_bnds"), (lat_var, "lat_bnds")]:
+                b = getattr(coord, "bounds", None)
+                grid[key] = nc.variables[b][:] if b in nc.variables else None
+            if grid["lon_bnds"] is not None and grid["lat_bnds"] is not None:
+                grid["kind"] = "unstructured"
+                return grid
+            grid["kind"] = "nodes"
+            node_dim = lon_var.dimensions[0]
+            n_nodes = len(nc.dimensions[node_dim])
+            grid["triangles"] = _find_triangles(nc, node_dim, n_nodes, var)
+
+        elif lon_var.ndim == 2 and lat_var.ndim == 2:
+            # match the order of the variable's horizontal dimensions
+            if [d for d in x.dimensions if d in lon_var.dimensions] != list(
+                lon_var.dimensions
+            ):
+                grid["lon"] = grid["lon"].T
+                grid["lat"] = grid["lat"].T
+            grid["kind"] = "curvilinear"
+            return grid
+        else:
+            raise ValueError(
+                "Unable to parse coordinates. Please check if dataset has a lonlat grid!"
+            )
+
+    # CDO drops the mesh connectivity, so look for it in the files the data came from
+    for ff in mesh_files or []:
+        if grid["triangles"] is not None:
+            break
+        try:
+            with Dataset(ff) as nc:
+                for name, dim in nc.dimensions.items():
+                    if len(dim) == n_nodes:
+                        grid["triangles"] = _find_triangles(nc, name, n_nodes, var)
+                        if grid["triangles"] is not None:
+                            break
+        except Exception:
+            pass
+    return grid
+
+
+def _bad_coords(lon, lat):
+    """
+    Mask of grid points with unusable coordinates: missing, out of range, or a
+    lon/lat pair shared by many points (e.g. land points all set to -1)
+    """
+    bad = np.ma.getmaskarray(lon) | np.ma.getmaskarray(lat)
+    lon = np.ma.filled(lon, np.nan).astype(float)
+    lat = np.ma.filled(lat, np.nan).astype(float)
+    with np.errstate(invalid="ignore"):
+        bad |= ~np.isfinite(lon) | ~np.isfinite(lat)
+        bad |= (np.abs(lat) > 90) | (np.abs(lon) > 720)
+    key = np.round(lon[~bad], 5) * 1000 + np.round(lat[~bad], 5)
+    if key.size > 0:
+        unique, counts = np.unique(key, return_counts=True)
+        repeated = unique[counts > max(10, 0.001 * lon.size)]
+        if len(repeated) > 0:
+            bad[~bad] = np.isin(key, repeated)
+    return bad
+
+
+def _cell_corners(x):
+    """Cell corners from cell centres, as the mean of the 4 surrounding centres"""
+    x = np.pad(x, 1, mode="reflect", reflect_type="odd")
+    return 0.25 * (x[:-1, :-1] + x[1:, :-1] + x[:-1, 1:] + x[1:, 1:])
+
+
+def _curvilinear_mesh(ax, proj, lon, lat, values, **kwargs):
+    """
+    Plot values on a curvilinear grid. Cell centres are projected first, so that
+    cells crossing the edge of the map can be removed, rather than smeared across it
+    """
+    from scipy import ndimage
+
+    bad = np.ma.getmaskarray(lon)
+    lon = np.where(bad, 0.0, np.ma.filled(lon, 0.0))
+    lat = np.where(bad, 0.0, np.ma.filled(lat, 0.0))
+    xy = proj.transform_points(ccrs.PlateCarree(), lon, lat)
+    x = xy[..., 0]
+    y = xy[..., 1]
+    bad = bad | ~np.isfinite(x) | ~np.isfinite(y)
+    if bad.all():
+        raise ValueError("No data can be shown with this projection")
+    if bad.any():
+        # give unusable points the position of the nearest usable one
+        idx = ndimage.distance_transform_edt(
+            bad, return_distances=False, return_indices=True
+        )
+        x = x[tuple(idx)]
+        y = y[tuple(idx)]
+        values = np.ma.masked_where(bad, values)
+
+    x = _cell_corners(x)
+    y = _cell_corners(y)
+
+    # remove cells that span the edge of the map
+    def span(z):
+        z = np.stack([z[:-1, :-1], z[1:, :-1], z[:-1, 1:], z[1:, 1:]])
+        return z.max(axis=0) - z.min(axis=0)
+
+    x_size = proj.x_limits[1] - proj.x_limits[0]
+    y_size = proj.y_limits[1] - proj.y_limits[0]
+    values = np.ma.masked_where(
+        (span(x) > 0.1 * x_size) | (span(y) > 0.1 * y_size), values
+    )
+
+    return Axes.pcolormesh(ax, x, y, values, shading="flat", **kwargs)
+
+
+def _unstructured_cells(
+    ax, proj, lon, lat, lon_bnds, lat_bnds, values, vmin=None, vmax=None, **kwargs
+):
+    """Plot values on an unstructured grid, drawing each cell as a polygon"""
+    from matplotlib.collections import PolyCollection
+
+    if lon_bnds is None or lat_bnds is None:
+        raise ValueError(
+            "Unstructured grids can only be plotted if they have cell bounds"
+        )
+
+    keep = ~np.ma.getmaskarray(values)
+    lon = np.ma.filled(lon, np.nan).astype(float)[keep]
+    lon_bnds = np.ma.filled(lon_bnds, np.nan).astype(float)[keep]
+    lat_bnds = np.ma.filled(lat_bnds, np.nan).astype(float)[keep]
+    values = np.ma.filled(values, np.nan)[keep]
+
+    # vertices on the same side of the dateline as the cell centre
+    lon = lon[:, None]
+    lon_bnds = lon + ((lon_bnds - lon + 180) % 360) - 180
+
+    xy = proj.transform_points(ccrs.PlateCarree(), lon_bnds.ravel(), lat_bnds.ravel())
+    xy = xy[:, :2].reshape(lon_bnds.shape + (2,))
+
+    # remove cells that span the edge of the map
+    x_size = proj.x_limits[1] - proj.x_limits[0]
+    with np.errstate(invalid="ignore"):
+        span = xy[..., 0].max(axis=1) - xy[..., 0].min(axis=1)
+        ok = np.isfinite(xy).all(axis=(1, 2)) & (span < 0.5 * x_size)
+
+    cells = PolyCollection(
+        xy[ok], edgecolors="face", linewidths=0.2, antialiaseds=False, **kwargs
+    )
+    cells.set_array(values[ok])
+    if vmin is not None or vmax is not None:
+        cells.set_clim(vmin, vmax)
+    ax.add_collection(cells)
+    ax.autoscale_view()
+    return cells
+
+
+def _unstructured_nodes(
+    ax, proj, lon, lat, triangles, values, vmin=None, vmax=None, **kwargs
+):
+    """
+    Plot values on the nodes of an unstructured triangular mesh (e.g. FVCOM,
+    SCHISM, ADCIRC). If the mesh triangles are unknown, they are recreated by
+    Delaunay triangulation, removing triangles much larger than the mesh spacing
+    """
+    import matplotlib.tri as mtri
+
+    bad = np.ma.getmaskarray(lon) | np.ma.getmaskarray(lat)
+    lon = np.where(bad, 0.0, np.ma.filled(lon, 0.0))
+    lat = np.where(bad, 0.0, np.ma.filled(lat, 0.0))
+    xy = proj.transform_points(ccrs.PlateCarree(), lon, lat)
+    x = xy[:, 0]
+    y = xy[:, 1]
+    values = np.ma.filled(np.ma.masked_invalid(values).astype(float), np.nan)
+    bad = bad | ~np.isfinite(x) | ~np.isfinite(y)
+    x[bad] = 0.0
+    y[bad] = 0.0
+
+    if triangles is None:
+        from scipy.spatial import cKDTree
+
+        # only triangulate the points with data, so that land is not filled in
+        keep = np.where(~bad & np.isfinite(values))[0]
+        if len(keep) < 3:
+            raise ValueError("No data can be shown with this projection")
+        tri = mtri.Triangulation(x[keep], y[keep])
+        triangles = keep[tri.triangles]
+        # remove triangles with edges much longer than the spacing of their nodes
+        points = np.column_stack([x[keep], y[keep]])
+        spacing = np.full(len(x), np.inf)
+        spacing[keep] = cKDTree(points).query(points, k=2)[0][:, 1]
+        edges = np.stack(
+            [
+                np.hypot(
+                    x[triangles[:, i]] - x[triangles[:, j]],
+                    y[triangles[:, i]] - y[triangles[:, j]],
+                )
+                for i, j in [(0, 1), (1, 2), (2, 0)]
+            ]
+        )
+        too_long = edges.max(axis=0) > 4 * spacing[triangles].max(axis=1)
+    else:
+        too_long = False
+
+    # remove triangles with missing data, or that span the edge of the map
+    x_size = proj.x_limits[1] - proj.x_limits[0]
+    x_tri = x[triangles]
+    hide = (
+        too_long
+        | bad[triangles].any(axis=1)
+        | ~np.isfinite(values[triangles]).all(axis=1)
+        | (x_tri.max(axis=1) - x_tri.min(axis=1) > 0.5 * x_size)
+    )
+    triangles = triangles[~hide]
+    if len(triangles) == 0:
+        raise ValueError("No data can be shown with this projection")
+
+    # only keep the nodes that are used, to save memory with large meshes
+    used, triangles = np.unique(triangles, return_inverse=True)
+    triangles = triangles.reshape(-1, 3)
+    tri = mtri.Triangulation(x[used], y[used], triangles)
+    # values vary linearly across each triangle, as in finite element models
+    im = Axes.tripcolor(ax, tri, values[used], shading="gouraud", **kwargs)
+    if vmin is not None or vmax is not None:
+        im.set_clim(vmin, vmax)
+    ax.autoscale_view()
+    return im
+
+
 def pub_plot(
     ds,
     var=None,
@@ -118,8 +498,12 @@ def pub_plot(
 
     Drawn with matplotlib and cartopy (cartopy must be installed). The dataset
     must contain one variable (or select one with var), one time step and one
-    vertical level, on a regular lon/lat grid. The figure is displayed inline
-    in Jupyter; use out to save it to a file.
+    vertical level. Regular lon/lat, curvilinear (e.g. NEMO, HYCOM, ROMS, rotated
+    pole and projected grids), unstructured grids with cell bounds (e.g. FESOM,
+    ICON) and unstructured meshes with values on their nodes (e.g. FVCOM, SCHISM,
+    ADCIRC) are plotted on their native grid, without regridding. The figure is
+    displayed inline in Jupyter;
+    use out to save it to a file.
 
     Parameters
     -------------
@@ -388,6 +772,9 @@ def pub_plot(
         if fig is None:
             raise ValueError("If you specify gs, you must also specify fig")
 
+    # the files the data comes from, before any processing (copy runs the dataset)
+    source_files = list(ds.current)[:1]
+
     ds1 = ds.copy()
 
     if not quiver:
@@ -401,53 +788,58 @@ def pub_plot(
             raise ValueError("Only one timestep wanted")
 
     ds_xr = ds1.to_xarray(decode_times=False)
-    failed = False
 
-    try:
-        lon_name = [x for x in ds_xr.dims if "lon" in x][0]
-        lat_name = [x for x in ds_xr.dims if "lat" in x][0]
-    except:
-        failed = True
-    if failed:
-        if "nav_lon" in ds_xr.coords and "nav_lat" in ds_xr.coords:
+    if "nav_lon" in ds_xr.coords and "nav_lat" in ds_xr.coords:
+        # NEMO grids. Regional NEMO-ERSEM grids can be converted to regular grids,
+        # otherwise they are plotted as curvilinear grids
+        if len([x for x in ds_xr.dims if "lon" in x]) == 0:
             if np.min(ds_xr["nav_lon"]) > -23.5 and np.max(ds_xr["nav_lon"]) < 24.0:
                 try:
-                    ds1.fix_nemo_ersem_grid()
-                    if land == "auto":
-                        land = "lightgrey"
-                    ds_xr = ds1.to_xarray(decode_times=False)
-                    lon_name = [x for x in ds_xr.dims if "lon" in x][0]
-                    lat_name = [x for x in ds_xr.dims if "lat" in x][0]
+                    ds2 = ds1.copy()
+                    ds2.fix_nemo_ersem_grid()
+                    ds2.run()
+                    ds1 = ds2
                 except:
-                    raise ValueError("Unable to parse coordinates")
-
-    mesh = False
-    if "lon_name" not in locals():
-        if "nav_lon" in ds_xr.coords:
-            if land == "auto":
-                land = "lightgrey"
-            mesh = True
-        else:
-            raise ValueError(
-                "Unable to parse coordinates. Please check if dataset has a lonlat grid!"
-            )
+                    pass
+        if land == "auto":
+            land = "lightgrey"
 
     if land == "auto":
         land = None
 
     GeoAxes._pcolormesh_patched = Axes.pcolormesh
 
-    # set data projection
-    # here a Lambert conformal is used, more projections can be found here https://scitools.org.uk/cartopy/docs/v0.15/crs/projections.html
+    # read the coordinates. Mesh connectivity may only be in the original files
+    var_name = u if quiver else ds1.variables[0]
+    try:
+        grid = _find_coords(ds1[0], var_name, mesh_files=source_files)
+    except ValueError:
+        # CDO drops coordinates it does not recognise (e.g. on some unstructured
+        # meshes), so use the original file's, if they match the data
+        if len(source_files) == 0 or source_files[0] == ds1[0]:
+            raise
+        grid = _find_coords(source_files[0], var_name)
+        with Dataset(ds1[0]) as nc_file:
+            n_values = np.prod([n for n in nc_file.variables[var_name].shape if n > 1])
+        n_coords = grid["lon"].size
+        if grid["kind"] == "regular":
+            n_coords = n_coords * grid["lat"].size
+        if n_values != n_coords:
+            raise
+    lon = grid["lon"]
+    lat = grid["lat"]
+    grid_kind = grid["kind"]
 
-    # read the coordinates
-    if not mesh:
-        with Dataset(ds1[0]) as input_file:
-            lat = input_file.variables[lat_name][:]
-            lon = input_file.variables[lon_name][:]
-    else:
-        lon = ds_xr["nav_lon"].values
-        lat = ds_xr["nav_lat"].values
+    if grid_kind != "regular":
+        # mask unusable coordinates, and use -180 to 180 longitudes, or 0 to 360
+        # if that gives a smaller longitude range, e.g. in the Pacific
+        bad = _bad_coords(lon, lat)
+        lat = np.ma.masked_where(bad, np.ma.filled(lat, 0.0))
+        lon = np.ma.masked_where(bad, (np.ma.filled(lon, 0.0) + 180) % 360 - 180)
+        if lon.max() - lon.min() > 340 and lat.max() - lat.min() < 160:
+            lon_360 = lon % 360
+            if lon_360.max() - lon_360.min() < lon.max() - lon.min():
+                lon = lon_360
 
     # set globe to True if lon lat spread is big enough
 
@@ -459,6 +851,7 @@ def pub_plot(
 
     # check coord type
     lambert = False
+    polar = False
 
     if projection == "auto":
         if lat.min() < 0 and lat.max() > 0:
@@ -468,6 +861,13 @@ def pub_plot(
                 proj = ccrs.LambertConformal(
                     central_longitude=np.mean(lon), central_latitude=np.mean(lat)
                 )
+            elif not globe and lat.min() > 0:
+                # polar regions, e.g. the Arctic
+                proj = ccrs.NorthPolarStereo()
+                polar = True
+            elif not globe and lat.max() < 0:
+                proj = ccrs.SouthPolarStereo()
+                polar = True
             else:
                 proj = ccrs.PlateCarree()
     else:
@@ -480,7 +880,7 @@ def pub_plot(
     if projection == None:
         proj = ccrs.PlateCarree()
 
-    if isinstance(projection, ccrs.NorthPolarStereo) and size == "auto":
+    if (isinstance(projection, ccrs.NorthPolarStereo) or polar) and size == "auto":
         size = [8,8]
     if isinstance(projection, ccrs.SouthPolarStereo) and size == "auto":
         size = [8,8]
@@ -498,12 +898,17 @@ def pub_plot(
         else:
             size[1] = (
                 size[0]
-                * haversine(float(min(lon)), min(lat), min(lon), max(lat))
+                * haversine(
+                    float(np.min(lon)),
+                    float(np.min(lat)),
+                    float(np.min(lon)),
+                    float(np.max(lat)),
+                )
                 / haversine(
-                    min(lon),
-                    0.4 * (min(lat) + max(lat)),
-                    max(lon),
-                    0.4 * (min(lat) + max(lat)),
+                    float(np.min(lon)),
+                    0.4 * float(np.min(lat) + np.max(lat)),
+                    float(np.max(lon)),
+                    0.4 * float(np.min(lat) + np.max(lat)),
                 )
                 / 1.1
             )
@@ -511,18 +916,9 @@ def pub_plot(
         max_size = max(size)
         size = [5 * size[0] / size[1], 5]
 
-    # check how many dimensions the coordinate variables have. if they have 1 dimension only, then the grid need to be created
-    if (len(lat.shape) == 1) and (len(lon.shape) == 1):
-        if not mesh:
-            lon, lat = np.meshgrid(lon, lat)
-    elif (len(lat.shape) == 1) or (
-        len(lon.shape) == 1
-    ):  # if the variable have different dimensions print an error
-        sys.exit(
-            "something is wrong in the input file. the coordiantes variables have different dimensions"
-        )
-    else:
-        pass
+    # regular grids need the full lon/lat grid
+    if grid_kind == "regular":
+        lon, lat = np.meshgrid(lon, lat)
 
     # read the values. the array is squeezed to remove the temporal dimension that has length 1
     if quiver:
@@ -536,6 +932,13 @@ def pub_plot(
     if not quiver:
         with Dataset(ds1[0]) as input_file:
             values = input_file.variables[ds1.variables[0]][:].squeeze()
+
+        if grid_kind != "regular":
+            # hide values at unusable coordinates
+            bad_values = bad | np.ma.getmaskarray(values)
+            values = np.ma.masked_invalid(
+                np.where(bad_values, np.nan, np.ma.filled(values, np.nan))
+            )
 
         if limits is not None:
             if limits[0] is None:
@@ -702,17 +1105,49 @@ def pub_plot(
                 vmax = max(abs(vmin), abs(vmax))
                 vmin = -vmax
 
-        im = ax.pcolormesh(
-            lon,
-            lat,
-            values,
-            cmap=colours,
-            transform=data_crs,
-            shading="nearest",
-            norm=norm,
-            vmin=vmin,
-            vmax=vmax,
-        )
+        if grid_kind == "curvilinear":
+            im = _curvilinear_mesh(
+                ax, proj, lon, lat, values, cmap=colours, norm=norm, vmin=vmin, vmax=vmax
+            )
+        elif grid_kind == "unstructured":
+            im = _unstructured_cells(
+                ax,
+                proj,
+                lon,
+                lat,
+                grid["lon_bnds"],
+                grid["lat_bnds"],
+                values,
+                cmap=colours,
+                norm=norm,
+                vmin=vmin,
+                vmax=vmax,
+            )
+        elif grid_kind == "nodes":
+            im = _unstructured_nodes(
+                ax,
+                proj,
+                lon,
+                lat,
+                grid["triangles"],
+                values,
+                cmap=colours,
+                norm=norm,
+                vmin=vmin,
+                vmax=vmax,
+            )
+        else:
+            im = ax.pcolormesh(
+                lon,
+                lat,
+                values,
+                cmap=colours,
+                transform=data_crs,
+                shading="nearest",
+                norm=norm,
+                vmin=vmin,
+                vmax=vmax,
+            )
 
     # add coastline and land colour. More options, including about resolution of coastline, colour and so on can be found here
     # https://scitools.org.uk/cartopy/docs/v0.14/matplotlib/feature_interface.html
