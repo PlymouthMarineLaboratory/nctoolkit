@@ -15,8 +15,14 @@ on:
 
 jobs:
   build:
+    name: Linux tests (Python 3.14) (${{ matrix.group }}/3)
 
     runs-on: "ubuntu-latest"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3]
 
     steps:
       - uses: actions/checkout@v4
@@ -40,11 +46,12 @@ jobs:
           pip install pandas
           pip install rioxarray
           pip install pytest
+          pip install pytest-split
           pip install pytest-cov
           pip install coverage
 
       - name: Test with pytest
         run: |
-          python testing/test_parallel.py
-          coverage run -m pytest tests/test*.py
+          if [ "${{ matrix.group }}" = "1" ]; then python testing/test_parallel.py; fi
+          coverage run -m pytest tests/test*.py --splits 3 --group ${{ matrix.group }} --splitting-algorithm duration_based_chunks
           coverage report

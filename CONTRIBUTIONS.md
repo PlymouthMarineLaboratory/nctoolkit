@@ -22,6 +22,7 @@ git checkout -b feature/your-feature-name
 Add your feature, fix bugs, or improve documentation. Be sure to:
 Keep your changes focused on a single feature or fix for easier review.
 Test your modifications to ensure they work as intended.
+CI runs the tests in 3 parallel groups using pytest-split, balanced by the timings in `.test_durations`. To refresh that file after adding many tests, run `pytest tests/test*.py --store-durations --durations-path .test_durations`.
 Follow any coding style guidelines noted in the project.
 
 5. Commit Your Changes
