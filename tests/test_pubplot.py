@@ -265,3 +265,63 @@ class TestCrop:
         with pytest.raises(ValueError, match = "time step"):
             nc.panel_plot({"all": nc.open_data(ff, checks = False)})
         plt.close("all")
+
+
+class TestAntimeridian:
+    def test_split_0_360(self):
+        from nctoolkit.static_plot import _split_antimeridian
+
+        lon = np.arange(0.5, 360, 1.0)
+        lat = np.arange(-89.5, 90, 1.0)
+        values = np.ma.masked_array(np.tile(lon, (lat.size, 1)))
+        lon_edges, lat_edges, new_values = _split_antimeridian(lon, lat, values)
+        assert lon_edges[0] == -180 and lon_edges[-1] == 180
+        assert np.all(np.diff(lon_edges) > 0)
+        assert new_values.shape == (lat.size, lon_edges.size - 1)
+        assert lat_edges.size == lat.size + 1
+        # the cell centred at 180 is split between the two edges of the map
+        assert new_values[0, 0] == new_values[0, -1] == 180.5 or new_values[0, 0] == 180.5
+
+    def test_split_cell_on_antimeridian(self):
+        from nctoolkit.static_plot import _split_antimeridian
+
+        lon = np.arange(0, 360, 1.0)
+        lat = np.arange(-89.5, 90, 1.0)
+        values = np.tile(lon, (lat.size, 1))
+        lon_edges, _, new_values = _split_antimeridian(lon, lat, values)
+        assert new_values.shape[1] == lon.size + 1
+        assert new_values[0, 0] == new_values[0, -1] == 180
+
+    def test_no_split_needed(self):
+        from nctoolkit.static_plot import _split_antimeridian
+
+        lat = np.arange(-89.5, 90, 1.0)
+        # edges at -180 and 180, so no cell crosses the antimeridian
+        lon = np.arange(-179.5, 180, 1.0)
+        assert _split_antimeridian(lon, lat, np.zeros((lat.size, lon.size))) is None
+        # regional grid crossing the antimeridian is left alone
+        lon = np.arange(120, 290, 1.0)
+        assert _split_antimeridian(lon, lat, np.zeros((lat.size, lon.size))) is None
+
+    def test_missing_values_stay_blank(self, tmp_path):
+        import matplotlib.image as mpimg
+
+        lon = np.arange(0.5, 360, 1.0)
+        lat = np.arange(-89.5, 90, 1.0)
+        data = np.cos(np.radians(lat))[:, None] * np.ones(lon.size)[None, :] * 20
+        lon_diff = np.abs((lon + 180) % 360 - 180)
+        # a block of missing data, standing in for land, around lon 0, lat 5 to 50
+        data[np.ix_((lat > 5) & (lat < 50), lon_diff < 30)] = np.nan
+        in_file = str(tmp_path / "global_0_360.nc")
+        xr.Dataset(
+            {"sst": (("lat", "lon"), data.astype("float32"))},
+            coords={"lat": lat, "lon": lon},
+        ).to_netcdf(in_file, encoding={"sst": {"_FillValue": np.float32(1e20)}})
+
+        out_file = str(tmp_path / "plot.png")
+        ds = nc.open_data(in_file, checks=False)
+        ds.pub_plot(out=out_file)
+        img = mpimg.imread(out_file)
+        h, w = img.shape[:2]
+        # the missing block must be left blank rather than coloured
+        assert np.allclose(img[int(h * 0.40), int(w * 0.50), :3], 1.0)

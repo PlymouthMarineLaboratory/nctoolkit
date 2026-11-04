@@ -355,6 +355,65 @@ def _curvilinear_mesh(ax, proj, lon, lat, values, **kwargs):
     return Axes.pcolormesh(ax, x, y, values, shading="flat", **kwargs)
 
 
+def _cell_edges(x):
+    """Edges of 1D cells from their centres, as the midpoints between centres"""
+    d = np.diff(x)
+    return np.concatenate([[x[0] - d[0] / 2], x[:-1] + d / 2, [x[-1] + d[-1] / 2]])
+
+
+def _split_antimeridian(lon, lat, values):
+    """
+    Cell edges and values for a regular grid with cells that straddle the
+    antimeridian (e.g. 0 to 360 longitudes), re-expressed as -180 to 180 with
+    each straddling cell split in two. Cartopy otherwise wraps those cells itself,
+    and with some versions of cartopy/shapely the wrapped cells are drawn right
+    across the map, showing through where values are missing.
+    Returns None if the grid has no such cells, or is not a full-width global grid
+    """
+    lon = np.ma.filled(lon, np.nan).astype(float)
+    lat = np.ma.filled(lat, np.nan).astype(float)
+    if lon.ndim != 1 or lat.ndim != 1 or lon.size < 2 or lat.size < 2:
+        return None
+    if values.shape != (lat.size, lon.size):
+        return None
+    if not (np.all(np.isfinite(lon)) and np.all(np.isfinite(lat))):
+        return None
+    if not (np.all(np.diff(lon) > 0) and (np.all(np.diff(lat) > 0) or np.all(np.diff(lat) < 0))):
+        return None
+
+    edges = _cell_edges(lon)
+    if edges[-1] - edges[0] > 360 + 1e-6:
+        return None
+    # antimeridians (180 + 360k) strictly inside the grid
+    k = np.arange(np.ceil((edges[0] - 180) / 360), np.floor((edges[-1] - 180) / 360) + 1)
+    cuts = 180 + 360 * k
+    cuts = cuts[(cuts > edges[0] + 1e-6) & (cuts < edges[-1] - 1e-6)]
+    if len(cuts) == 0:
+        return None
+
+    # split the cells at the antimeridian, then move each into -180 to 180
+    edges = np.unique(np.concatenate([edges, cuts]))
+    mid = 0.5 * (edges[:-1] + edges[1:])
+    source = np.searchsorted(_cell_edges(lon), mid) - 1
+    shift = 360 * np.floor((mid + 180) / 360)
+    lo = edges[:-1] - shift
+    hi = edges[1:] - shift
+    order = np.argsort(lo)
+    lo = lo[order]
+    hi = hi[order]
+    if not np.allclose(lo[1:], hi[:-1], atol=1e-6):
+        # not a full circle, so there is nothing to wrap
+        return None
+
+    lat_edges = _cell_edges(lat)
+    lat_edges = np.clip(lat_edges, -90, 90)
+    return (
+        np.concatenate([lo, hi[-1:]]),
+        lat_edges,
+        values[:, source[order]],
+    )
+
+
 def _unstructured_cells(
     ax, proj, lon, lat, lon_bnds, lat_bnds, values, vmin=None, vmax=None, **kwargs
 ):
@@ -918,6 +977,7 @@ def pub_plot(
 
     # regular grids need the full lon/lat grid
     if grid_kind == "regular":
+        lon_1d, lat_1d = lon, lat
         lon, lat = np.meshgrid(lon, lat)
 
     # read the values. the array is squeezed to remove the temporal dimension that has length 1
@@ -1137,17 +1197,32 @@ def pub_plot(
                 vmax=vmax,
             )
         else:
-            im = ax.pcolormesh(
-                lon,
-                lat,
-                values,
-                cmap=colours,
-                transform=data_crs,
-                shading="nearest",
-                norm=norm,
-                vmin=vmin,
-                vmax=vmax,
-            )
+            split = _split_antimeridian(lon_1d, lat_1d, values)
+            if split is not None:
+                lon_edges, lat_edges, values = split
+                im = ax.pcolormesh(
+                    lon_edges,
+                    lat_edges,
+                    values,
+                    cmap=colours,
+                    transform=data_crs,
+                    shading="flat",
+                    norm=norm,
+                    vmin=vmin,
+                    vmax=vmax,
+                )
+            else:
+                im = ax.pcolormesh(
+                    lon,
+                    lat,
+                    values,
+                    cmap=colours,
+                    transform=data_crs,
+                    shading="nearest",
+                    norm=norm,
+                    vmin=vmin,
+                    vmax=vmax,
+                )
 
     # add coastline and land colour. More options, including about resolution of coastline, colour and so on can be found here
     # https://scitools.org.uk/cartopy/docs/v0.14/matplotlib/feature_interface.html
