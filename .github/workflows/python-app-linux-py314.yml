@@ -5,7 +5,7 @@ name: Linux tests (Python 3.14)
 
 defaults:
   run:
-    shell: bash -l {0}
+    shell: bash -l -e -o pipefail {0}
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
       - name: Install dependencies
-        shell: bash -l {0}
+        shell: bash -l -e -o pipefail {0}
         run: |
           pip install numpy
           pip install dask
