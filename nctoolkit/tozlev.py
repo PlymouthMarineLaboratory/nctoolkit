@@ -31,6 +31,12 @@ def to_zlevels(self, levels=None, thickness=None, depths=None, surface=None):
         If thickness is supplied you must also supply this to identify whether the top or bottom of the level is the surface, i.e. the lowest level.
         This must be one of 'top' or 'bottom'.
     """
+    from nctoolkit.verticals import _fvcom_layers, _fvcom_interp
+
+    if depths is None and _fvcom_layers(self, thickness):
+        _fvcom_interp(self, levels)
+        return None
+
     self.run()
 
     if len(self) > 1:

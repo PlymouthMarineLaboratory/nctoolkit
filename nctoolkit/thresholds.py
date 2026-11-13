@@ -2,6 +2,7 @@ import os
 from nctoolkit.session import session_info
 from nctoolkit.utils import version_below
 import nctoolkit.api as api
+from nctoolkit.fvcom import drop_thickness
 
 
 def first_above(self, x=None):
@@ -40,6 +41,7 @@ def first_above(self, x=None):
         if os.path.exists(x) is False:
             raise ValueError(f"{x} does not exist on disk!")
 
+    drop_thickness(self)
     variable = self.variables[0]
 
     run_code = False
@@ -112,6 +114,7 @@ def first_below(self, x=None):
     version = session_info["cdo"]
     old = version_below(version, "2.1.0")
 
+    drop_thickness(self)
     variable = self.variables[0]
 
     run_code = False
@@ -182,6 +185,7 @@ def last_above(self, x=None):
     version = session_info["cdo"]
     old = version_below(version, "2.1.0")
 
+    drop_thickness(self)
     variable = self.variables[0]
 
     # if len(self.variables) > 1:
@@ -258,6 +262,7 @@ def last_below(self, x=None):
     version = session_info["cdo"]
     old = version_below(version, "2.1.0")
 
+    drop_thickness(self)
     variable = self.variables[0]
 
     # if len(self.variables) > 1:

@@ -1,3 +1,7 @@
+from nctoolkit.fvcom import not_for_fvcom
+
+
+@not_for_fvcom("it needs a regular lon/lat grid")
 def resample_grid(self, factor=None):
     """
     resample_grid: Resample the horizontal grid of a dataset

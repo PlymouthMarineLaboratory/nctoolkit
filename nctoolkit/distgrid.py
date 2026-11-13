@@ -5,6 +5,7 @@ import os
 from nctoolkit.cleanup import cleanup
 from nctoolkit.temp_file import temp_file
 from nctoolkit.session import session_info, get_tempdirs, append_safe, remove_safe
+from nctoolkit.fvcom import not_for_fvcom
 
 
 def dist_cdo(self, i=None, j=None):
@@ -75,6 +76,7 @@ def dist_cdo(self, i=None, j=None):
     self.disk_clean()
 
 
+@not_for_fvcom("it splits regular lon/lat grids into boxes")
 def distribute(self, m=1, n=1):
     """
     distribute: Split the dataset into multiple evenly sized horizontal and vertical new files

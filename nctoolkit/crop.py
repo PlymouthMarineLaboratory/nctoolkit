@@ -5,6 +5,7 @@ import numbers
 
 from nctoolkit.cleanup import cleanup
 from nctoolkit.flatten import str_flatten
+from nctoolkit.fvcom import is_fvcom
 from nctoolkit.runthis import run_nco, tidy_command
 from nctoolkit.temp_file import temp_file
 from nctoolkit.session import remove_safe
@@ -48,6 +49,11 @@ def crop(self, lon=[-180, 180], lat=[-90, 90], nco=False, nco_vars=None):
         lon = [-180, 180]
     if lat is None:
         lat = [-90, 90]
+
+    if nco and is_fvcom(self):
+        raise ValueError(
+            "crop with nco = True does not work with FVCOM data. Please use nco = False"
+        )
 
     if nco:
         self.run()

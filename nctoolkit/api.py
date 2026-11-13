@@ -1115,6 +1115,14 @@ class DataSet(object):
 
         self._grid = None
         self._weights = None
+
+        # FVCOM output, opened by open_fvcom
+        # fvcom: is the dataset on an FVCOM mesh?
+        # fvcom_thickness: the variable holding the thickness of the sigma layers
+        self.fvcom = False
+        self.fvcom_thickness = None
+        self._mesh_file = None
+
         # track number of held over commands
         self._ncommands = 0
 
@@ -1747,6 +1755,21 @@ class DataSet(object):
     def history(self, value):
         self._history = value
 
+    @property
+    def _fvcom_mesh(self):
+        """The file holding the FVCOM mesh, used when regridding"""
+        return getattr(self, "_mesh_file", None)
+
+    @_fvcom_mesh.setter
+    def _fvcom_mesh(self, value):
+        # the mesh file is kept while any dataset uses it
+        old = getattr(self, "_mesh_file", None)
+        if value is not None:
+            append_safe(value)
+        if old is not None:
+            remove_safe(old)
+        self._mesh_file = value
+
     def copy(self):
         """
         Make a deep copy of an DataSet object.
@@ -1761,6 +1784,8 @@ class DataSet(object):
         new = copy.deepcopy(self)
         for ff in new:
             append_safe(ff)
+        if new._mesh_file is not None:
+            append_safe(new._mesh_file)
         if self._weights is not None:
             append_safe(self._weights)
             append_safe(self._grid)
@@ -1784,6 +1809,11 @@ class DataSet(object):
                 remove_safe(self._weights)
             if self._weights is not None:
                 remove_safe(self._grid)
+            if getattr(self, "_mesh_file", None) is not None:
+                try:
+                    remove_safe(self._mesh_file)
+                except:
+                    blah = "blah"
 
         try:
             cleanup()

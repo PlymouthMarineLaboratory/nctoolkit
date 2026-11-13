@@ -1,5 +1,6 @@
 from nctoolkit.utils import is_curvilinear
 from nctoolkit.api import open_data
+from nctoolkit.fvcom import not_for_fvcom
 
 
 def zonstat(self, stat="mean"):
@@ -14,6 +15,7 @@ def zonstat(self, stat="mean"):
     self.cdo_command(cdo_command, ensemble=False)
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def zonal_sum(self, by_area=False):
     """
     zonal_sum: Calculate the zonal sum for each time step
@@ -41,6 +43,7 @@ def zonal_sum(self, by_area=False):
     zonstat(self, stat="sum")
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def zonal_mean(self):
     """
     zonal_mean: Calculate the zonal mean for each time step
@@ -55,6 +58,7 @@ def zonal_mean(self):
     zonstat(self, stat="mean")
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def zonal_min(self):
     """
     zonal_min: Calculate the zonal minimum for each time step
@@ -68,6 +72,7 @@ def zonal_min(self):
     zonstat(self, stat="min")
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def zonal_max(self):
     """
     zonal_max: Calculate the zonal maximum for each time step
@@ -81,6 +86,7 @@ def zonal_max(self):
     zonstat(self, stat="max")
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def zonal_range(self):
     """
     zonal_range: Calculate the zonal range for each time step

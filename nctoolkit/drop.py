@@ -97,6 +97,14 @@ def drop(self, **kwargs):
                 if not isinstance(vv, str):
                     raise TypeError(f"{vv} is not a str")
 
+            # the FVCOM layer thickness is gone
+            thickness = getattr(self, "fvcom_thickness", None)
+            if thickness is not None:
+                import fnmatch
+
+                if any(fnmatch.fnmatch(thickness, vv) for vv in vars):
+                    self.fvcom_thickness = None
+
             vars = str_flatten(vars, ",")
 
             # create the cdo command and run it

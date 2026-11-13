@@ -6,6 +6,7 @@ import warnings
 
 from nctoolkit.api import open_data
 from nctoolkit.cleanup import cleanup
+from nctoolkit.fvcom import is_fvcom, fvcom_weights, FVCOM_REMAP
 from nctoolkit.generate_grid import generate_grid
 from nctoolkit.runthis import run_cdo, run_this
 from nctoolkit.session import append_safe, remove_safe, get_safe
@@ -45,6 +46,9 @@ def regrid(self, grid=None, method="bil", recycle=False, one_grid=False, **kwarg
         Set to True if you want to re-use the remapping weights when you are regridding another dataset.
     one_grid : bool
         Set to True if all files in multi-file dataset have the same grid, to speed things up.
+        FVCOM data, from open_fvcom, can use "bil" (linear interpolation within the mesh's
+        triangles), "nn", "con", "con2", "laf" and "dis". Places outside the mesh are missing,
+        except with "dis".
     kwargs : optional method to generate grid
         Instead of supplying a grid using 'grid', you can supply `lon` and `lat`. These must be equally
         lengthed lists or arrays that will be used to generate the grid. If you want to regrid to a single
@@ -96,13 +100,25 @@ def regrid(self, grid=None, method="bil", recycle=False, one_grid=False, **kwarg
 
     valid_methods = ["bil", "nn", "bic", "dis", "con", "con2", "laf"]
 
+    fvcom = is_fvcom(self)
+    if fvcom:
+        if method == "bic":
+            raise ValueError("Bicubic remapping is not available for FVCOM data. Please use bil or nn")
+        if method == "dis":
+            warnings.warn("Distance weighted remapping fills places outside the FVCOM mesh with values")
+
     if isinstance(grid, api.DataSet):
         if grid._weights is not None and grid._grid is not None:
             target_grid = grid._grid
             weights_nc = grid._weights
             cdo_command = f"-remap,{target_grid},{weights_nc}"
+            if fvcom:
+                cdo_command = FVCOM_REMAP.format(grid=target_grid, weights=weights_nc)
             self.cdo_command(cdo_command, ensemble=False)
             # run_this(cdo_command, self, output="ensemble")
+            if fvcom:
+                self.fvcom = False
+                self._fvcom_mesh = None
 
             return None
 
@@ -192,26 +208,40 @@ def regrid(self, grid=None, method="bil", recycle=False, one_grid=False, **kwarg
             grid_split[key], suppress_messages=True, thredds=self._thredds, checks=False
         )
 
-        weights_nc = temp_file("nc")
+        if fvcom and method in ["bil", "nn"]:
+            # CDO cannot work out these weights for an unstructured grid,
+            # so they are worked out on the FVCOM mesh
+            try:
+                weights_nc = fvcom_weights(
+                    tracker.current[0], target_grid, method, self._fvcom_mesh
+                )
+            except Exception as e:
+                del tracker
+                raise ValueError(e)
+            append_safe(weights_nc)
+        else:
+            weights_nc = temp_file("nc")
 
-        cdo_command = (
-            f"cdo -gen{method},{target_grid} {tracker.current[0]} {weights_nc}"
-        )
-
-        try:
-            weights_nc = run_cdo(
-                cdo_command, target=weights_nc, precision=self._precision
+            cdo_command = (
+                f"cdo -gen{method},{target_grid} {tracker.current[0]} {weights_nc}"
             )
-        except Exception as e:
-            del tracker
-            remove_safe(weights_nc)
-            raise ValueError(e)
+
+            try:
+                weights_nc = run_cdo(
+                    cdo_command, target=weights_nc, precision=self._precision
+                )
+            except Exception as e:
+                del tracker
+                remove_safe(weights_nc)
+                raise ValueError(e)
 
         if recycle:
             self._weights = weights_nc
             self._grid = target_grid
 
         cdo_command = f"cdo -remap,{target_grid},{weights_nc}"
+        if fvcom and method in ["bil", "nn"]:
+            cdo_command = "cdo " + FVCOM_REMAP.format(grid=target_grid, weights=weights_nc)
 
         tracker._execute = True
 
@@ -240,5 +270,9 @@ def regrid(self, grid=None, method="bil", recycle=False, one_grid=False, **kwarg
             remove_safe(ff)
 
     self._thredds = False
+    # the data is no longer on the FVCOM mesh
+    if fvcom:
+        self.fvcom = False
+        self._fvcom_mesh = None
     cleanup()
     self.disk_clean()

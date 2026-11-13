@@ -24,6 +24,7 @@ Opening/copying data
    open_url
    open_thredds
    open_geotiff
+   open_fvcom
    from_xarray 
    DataSet.copy
 

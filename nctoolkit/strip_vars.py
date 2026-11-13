@@ -5,8 +5,10 @@ from nctoolkit.runthis import run_nco
 from nctoolkit.temp_file import temp_file
 from nctoolkit.session import get_safe
 from nctoolkit.session import remove_safe
+from nctoolkit.fvcom import not_for_fvcom
 
 
+@not_for_fvcom("it removes the mesh's coordinates and cell bounds", "")
 def strip_variables(self, vars=None):
     """
     strip_variables: Remove any variables, such as bnds etc., from variables.

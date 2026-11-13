@@ -386,6 +386,14 @@ def select_variables(self, vars=None):
             if ("*" not in x) and ("?" not in x):
                 raise ValueError(f"{x} is not a valid netCDF variable name")
 
+    # the FVCOM layer thickness is gone, unless it is selected
+    thickness = getattr(self, "fvcom_thickness", None)
+    if thickness is not None:
+        import fnmatch
+
+        if not any(fnmatch.fnmatch(thickness, vv) for vv in vars_list):
+            self.fvcom_thickness = None
+
     vars_list = str_flatten(vars_list, ",")
 
     cdo_command = f"-selname,{vars_list}"

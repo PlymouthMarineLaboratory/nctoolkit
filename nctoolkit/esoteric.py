@@ -8,8 +8,10 @@ from .cleanup import cleanup
 from .runthis import run_nco
 from .api import open_data
 import warnings
+from nctoolkit.fvcom import not_for_fvcom
 
 
+@not_for_fvcom("it is only for NEMO's AMM7 grid", "")
 def fix_amm7_grid(self):
     """
     A quick hack to change the grid file in AMM7 North West European shelf Nemo grids.
@@ -78,6 +80,7 @@ def fix_amm7_grid(self):
     self.run()
 
 
+@not_for_fvcom("it is only for NEMO-ERSEM grids", "")
 def fix_nemo_ersem_grid(self):
     """
     A quick hack to change the grid file in North West European shelf Nemo grids.
@@ -163,6 +166,7 @@ def no_leaps(self):
     self.cdo_command(cdo_command, ensemble=False)
 
 
+@not_for_fvcom("the FVCOM mesh is unstructured, and its grid type cannot be changed", "")
 def set_gridtype(self, grid):
     """
     Set the grid type. Only use this if, for example, the grid is "generic" when it should be lonlat.

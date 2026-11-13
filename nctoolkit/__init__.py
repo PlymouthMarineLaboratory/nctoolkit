@@ -14,6 +14,7 @@ from nctoolkit.api import (
 
 from nctoolkit.unify import unify
 from nctoolkit.shape import open_shape
+from nctoolkit.fvcom import open_fvcom
 from nctoolkit.static_plot import panel_plot
 
 from nctoolkit.validator import validator

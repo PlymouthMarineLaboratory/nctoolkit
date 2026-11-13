@@ -22,6 +22,11 @@ def invert(self, x=None):
         cdo_command = "-invertlev"
 
     elif "lat" in x.lower():
+        if getattr(self, "fvcom", False) is True:
+            raise TypeError(
+                "invert: Inverting latitudes does not work with FVCOM data, as the mesh has no latitude axis. "
+                "Please regrid the data first, e.g. using to_latlon"
+            )
         cdo_command = "-invertlat"
 
     else:

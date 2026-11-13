@@ -15,7 +15,8 @@ nctoolkit will work with more or less any structured horizontal grid, so long as
 
 
 It provides limited supported for unstructured horizontal grids. These grids are often idiosyncratic and require special treatment and therefore only limited functionality is available in CDO.
-However, interpolation via the nearest neighbour method is supported. In some cases, the metadata of the netCDF file may need to be changed to allow CDO to work with the data. 
+However, interpolation via the nearest neighbour method is supported.
+FVCOM output is fully supported through ``open_fvcom``. See :doc:`fvcom`. In some cases, the metadata of the netCDF file may need to be changed to allow CDO to work with the data. 
 So, if you are working with unstructured data and running into problems, reach out to us at the `nctoolkit Discussions page <https://github.com/PlymouthMarineLaboratory/nctoolkit/discussions>`__).
 
 In some cases methods may not be able to provide a fully accurate answer due to deficiencies in the underlying file metadata. 

@@ -763,5 +763,8 @@ def assign(self, drop=False, **kwargs):
         cdo_command = f"-aexpr,'{command}'"
     else:
         cdo_command = f"-expr,'{command}'"
+        # only the new variables are kept, so the FVCOM layer thickness may be gone
+        if getattr(self, "fvcom_thickness", None) not in kwargs:
+            self.fvcom_thickness = None
 
     self.cdo_command(cdo_command, ensemble=False)

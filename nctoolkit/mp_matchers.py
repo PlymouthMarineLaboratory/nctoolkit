@@ -1,4 +1,5 @@
 from nctoolkit.matchpoint import open_matchpoint
+from nctoolkit.fvcom import is_fvcom
 
 
 def match_points(
@@ -86,6 +87,31 @@ def match_points(
     for x in ["year", "month", "day"]:
         if x in df.columns:
             self.points_temporal = True
+
+    # FVCOM data is first regridded to the points using the mesh, and the depths
+    # of the sigma layers come from the layer thickness
+    thickness = getattr(ds, "fvcom_thickness", None)
+    if is_fvcom(ds) or thickness is not None:
+        if is_fvcom(ds):
+            ds.regrid(df.loc[:, ["lon", "lat"]].drop_duplicates(), method=regrid)
+            regrid = "nn"
+        if thickness is not None and thickness in ds.variables:
+            if depths is None and "depth" in df.columns and len(ds.levels) > 1:
+                ds_depths = ds.copy()
+                ds_depths.fvcom_thickness = None
+                ds_depths.subset(variables=thickness)
+                ds_depths.tmean()
+                ds_depths.run()
+                ds_half = ds_depths.copy()
+                ds_half.divide(2)
+                ds_depths.vertical_cumsum()
+                ds_depths.subtract(ds_half)
+                ds_depths.rename({thickness: "depth"})
+                ds_depths.run()
+                depths = ds_depths
+                if quiet is False:
+                    print(f"Depths were derived from the FVCOM layer thickness, {thickness}.")
+            ds.drop(variables=thickness)
 
     mp.add_data(x=ds, depths=depths, variables=variables, top=top, nan=nan, quiet = quiet, **kwargs)
     mp.add_points(df, quiet = quiet)

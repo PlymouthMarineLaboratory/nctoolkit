@@ -5,6 +5,7 @@ from nctoolkit.runthis import run_cdo, tidy_command
 from nctoolkit.temp_file import temp_file
 from nctoolkit.session import remove_safe
 from nctoolkit.utils import cdo_version_blocked
+from nctoolkit.fvcom import not_for_fvcom
 
 
 def boxstat(self, stat="mean", x=1, y=1):
@@ -28,6 +29,7 @@ def boxstat(self, stat="mean", x=1, y=1):
     self.cdo_command(cdo_command, ensemble=False)
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def box_mean(self, x=1, y=1):
     """
     box_mean: Calculate the grid box mean for all variables.
@@ -52,6 +54,7 @@ def box_mean(self, x=1, y=1):
     boxstat(self, stat="mean", x=x, y=y)
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def box_max(self, x=1, y=1):
     """
     box_max: Calculate the grid box max for all variables.
@@ -77,6 +80,7 @@ def box_max(self, x=1, y=1):
     boxstat(self, stat="max", x=x, y=y)
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def box_min(self, x=1, y=1):
     """
     box_min: Calculate the grid box min for all variables.
@@ -101,6 +105,7 @@ def box_min(self, x=1, y=1):
     boxstat(self, stat="min", x=x, y=y)
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def box_sum(self, x=1, y=1):
     """
     box_sum: Calculate the grid box sum for all variables.
@@ -126,6 +131,7 @@ def box_sum(self, x=1, y=1):
     boxstat(self, stat="sum", x=x, y=y)
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def box_range(self, x=1, y=1):
     """
     box_range: Calculate the grid box range for all variables.

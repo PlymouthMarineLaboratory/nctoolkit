@@ -65,6 +65,12 @@ def arithall(self, stat="divc", x=None):
     if len(self) == 0:
         raise ValueError("This does not work on empty datasets!")
 
+    if getattr(self, "fvcom_thickness", None) is not None:
+        warnings.warn(
+            f"This also changes the FVCOM layer thickness, {self.fvcom_thickness}. "
+            "Consider dropping it, or using assign, if you need it for vertical methods"
+        )
+
     # create the system command and run it
     cdo_command = f"-{stat},{x}"
 

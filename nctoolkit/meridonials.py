@@ -1,4 +1,5 @@
 from nctoolkit.utils import is_curvilinear
+from nctoolkit.fvcom import not_for_fvcom
 
 
 def zonstat(self, stat="mean"):
@@ -11,6 +12,7 @@ def zonstat(self, stat="mean"):
     self.cdo_command(cdo_command, ensemble=False)
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def meridonial_mean(self):
     """
     meridonial_mean: Calculate the meridonial mean for each year/month combination in files.
@@ -26,6 +28,7 @@ def meridonial_mean(self):
     zonstat(self, stat="mean")
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def meridonial_min(self):
     """
     meridonial_min: Calculate the meridonial minimum for each year/month combination in files.
@@ -41,6 +44,7 @@ def meridonial_min(self):
     zonstat(self, stat="min")
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def meridonial_max(self):
     """
     meridonial_max: Calculate the meridonial maximum for each year/month combination in files.
@@ -57,6 +61,7 @@ def meridonial_max(self):
     zonstat(self, stat="max")
 
 
+@not_for_fvcom("it needs a regular lon/lat grid")
 def meridonial_range(self):
     """
     meridonial_range: Calculate the meridonial range for each year/month combination in files.

@@ -3,6 +3,7 @@ import signal
 from contextlib import contextmanager
 from nctoolkit.session import session_info
 from nctoolkit.show import nc_variables
+from nctoolkit.fvcom import not_for_fvcom
 
 def coast_check():
     try:
@@ -35,6 +36,7 @@ def time_limit(seconds):
         signal.alarm(0)
 
 
+@not_for_fvcom("ncplot cannot show unstructured meshes", "Please use pub_plot instead, or regrid with to_latlon and then plot")
 def plot(self, vars=None, autoscale=True, out=None, coast=None, **kwargs):
     """
     plot: Automatically plot a dataset.

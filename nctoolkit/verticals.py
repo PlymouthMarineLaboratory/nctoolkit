@@ -1,3 +1,4 @@
+import os
 import subprocess
 import warnings
 import copy
@@ -6,6 +7,108 @@ from nctoolkit.api import open_data
 from nctoolkit.flatten import str_flatten
 from nctoolkit.show import nc_dtypes
 import nctoolkit.api as api
+from nctoolkit.fvcom import is_fvcom, thickness_of, refuse, check_levels, interp_file
+from nctoolkit.session import append_safe, remove_safe
+from nctoolkit.temp_file import temp_file
+
+
+def _fvcom_layers(self, thickness=None):
+    """
+    Should a vertical method use the FVCOM layer thickness? True for datasets from
+    open_fvcom, including once regridded, unless another thickness is supplied
+    """
+    name = getattr(self, "fvcom_thickness", None)
+    if not is_fvcom(self) and name is None:
+        return False
+    if thickness is None:
+        return True
+    return isinstance(thickness, str) and thickness == name
+
+
+def _fvcom_vertical(self, depth_range=None, fixed=None, integrate=False):
+    """
+    The thickness weighted mean, or integral, of each variable on the sigma
+    layers of an FVCOM dataset. Each file is weighted by its own thickness,
+    which changes with zeta, at each time step
+    """
+    if fixed:
+        raise ValueError(
+            "FVCOM data is on sigma layers, whose depths are not fixed. "
+            "Leave out fixed, and the layer thickness will be used"
+        )
+    thickness = thickness_of(self)
+    method = "vertical_integration" if integrate else "vertical_mean"
+
+    if depth_range is not None:
+        # the depths need a cumulative sum of the thickness, so each file is
+        # handled on its own
+        self.run()
+        # the datasets are kept until self holds their files, as deleting a
+        # dataset frees its files to be cleaned up
+        parts = []
+        for ff in self:
+            ds = open_data(ff, checks=False)
+            if integrate:
+                vertical_integration(ds, thickness=thickness, depth_range=depth_range)
+            else:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message="Assuming missing values")
+                    vertical_mean(ds, thickness=thickness, depth_range=depth_range)
+            parts.append(ds)
+        for ds in parts:
+            self.history += ds.history
+        self._hold_history = copy.deepcopy(self.history)
+        self.current = [ff for ds in parts for ff in ds.current]
+        del parts
+        self.fvcom_thickness = None
+        return None
+
+    contents = self.contents
+    layered = contents.query("nlevels > 1").drop_duplicates("variable")
+    layered = layered[layered.variable != thickness]
+    if len(layered) == 0:
+        raise ValueError(f"{method}: there are no variables on the sigma layers")
+    th = thickness
+    if integrate:
+        expressions = [f"{v}=vertsum({v}*{th})" for v in layered.variable]
+    else:
+        # layers with missing values are left out of the thickness
+        expressions = [f"{v}=vertsum({v}*{th})/vertsum({th}*({v}=={v}))" for v in layered.variable]
+    self.cdo_command(f"-expr,'{';'.join(expressions)}'", ensemble=False)
+
+    # CDO's expr loses the units and long names
+    units = {v: u for v, u in zip(layered.variable, layered.unit) if isinstance(u, str) and u != ""}
+    names = {v: n for v, n in zip(layered.variable, layered.long_name) if isinstance(n, str) and n != ""}
+    if len(units) > 0:
+        self.set_units(units)
+    if len(names) > 0:
+        self.set_longnames(names)
+    self.fvcom_thickness = None
+
+
+def _fvcom_interp(self, levels):
+    """Interpolate an FVCOM dataset from its sigma layers to fixed depths"""
+    levels = check_levels(levels)
+    thickness = thickness_of(self)
+    self.run()
+    new_files = []
+    for ff in self:
+        out = temp_file(".nc")
+        try:
+            interp_file(ff, thickness, levels, out)
+        except Exception as e:
+            if os.path.exists(out):
+                os.remove(out)
+            raise ValueError(e)
+        append_safe(out)
+        new_files.append(out)
+    self.history.append(f"nctoolkit FVCOM interpolation to depths {levels}")
+    self._hold_history = copy.deepcopy(self.history)
+    self.current = new_files
+    for ff in new_files:
+        remove_safe(ff)
+    self.fvcom_thickness = None
+
 
 # method to generate level bounds
 
@@ -28,6 +131,13 @@ def generate_level_bounds(self):
     >>> ds.generate_level_bounds()
 
     """
+    if is_fvcom(self):
+        refuse(
+            "generate_level_bounds",
+            "its levels are sigma layers, whose thickness is in the dataset's fvcom_thickness variable",
+            "The vertical methods use that thickness",
+        )
+
 
     self.cdo_command("-genlevelbounds", ensemble=False)
 
@@ -166,6 +276,15 @@ def vertical_interp(
 
     """
 
+    if depths is None and _fvcom_layers(self, thickness):
+        if fixed:
+            raise ValueError(
+                "FVCOM data is on sigma layers, whose depths are not fixed. "
+                "Leave out fixed, and the layer thickness will be used"
+            )
+        _fvcom_interp(self, levels)
+        return None
+
     # check surface
 
     if surface is not None:
@@ -298,6 +417,17 @@ def vertical_mean(self, thickness=None, depth_range=None, fixed=None):
 
 
     """
+
+    if _fvcom_layers(self, thickness):
+        if isinstance(depth_range, list):
+            if len(depth_range) != 2:
+                raise ValueError("Please provide a 2 variable list for depth range")
+            if depth_range[1] <= depth_range[0]:
+                raise ValueError("Please provide a correctly ordered depth range")
+        if depth_range is not None and not isinstance(depth_range, list):
+            raise TypeError("Please provide a list for the depth range!")
+        _fvcom_vertical(self, depth_range=depth_range, fixed=fixed)
+        return None
 
     if fixed is None and thickness is None:
         raise ValueError("Please state if levels are fixed or provide thickness")
@@ -482,6 +612,17 @@ def vertical_integration(self, thickness=None, depth_range=None, fixed=None):
     >>> ds.vertical_integration(fixed = True)
 
     """
+    if _fvcom_layers(self, thickness):
+        if isinstance(depth_range, list):
+            if len(depth_range) != 2:
+                raise ValueError("Please provide a 2 variable list for depth range")
+            if depth_range[1] <= depth_range[0]:
+                raise ValueError("Please provide a correctly ordered depth range")
+        if depth_range is not None and not isinstance(depth_range, list):
+            raise TypeError("Please provide a list for the depth range!")
+        _fvcom_vertical(self, depth_range=depth_range, fixed=fixed, integrate=True)
+        return None
+
     if fixed is None and thickness is None:
         raise ValueError("Please state if levels are fixed or provide thickness")
 
