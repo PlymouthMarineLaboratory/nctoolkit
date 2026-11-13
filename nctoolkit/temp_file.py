@@ -1,5 +1,5 @@
 import os
-import tempfile
+import uuid
 
 from nctoolkit.session import session_info
 from nctoolkit.session import append_tempdirs
@@ -32,8 +32,10 @@ def temp_file(ext=""):
     # The stamp goes on the file name itself, rather than being swapped into
     # the directory path: tempfile's directory isn't /tmp/ on macOS, so a
     # path-based replace would silently skip the stamp there.
-    target = tempfile.NamedTemporaryFile().name
-    target = actual_temp + session_info["stamp"] + os.path.basename(target)
+    # The random part is generated directly: creating a NamedTemporaryFile
+    # just to read its name leaves an unclosed file object that Python 3.14
+    # reports with a ResourceWarning when it is garbage collected.
+    target = actual_temp + session_info["stamp"] + "tmp" + uuid.uuid4().hex[:12]
     if not isinstance(ext, str):
         raise TypeError("Extension supplied is not a str")
     if ext.startswith("."):
