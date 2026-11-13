@@ -3,7 +3,7 @@ netCDF4
 hvplot
 panel
 pandas
-ncplot>=0.4.0
+ncplot>=0.4.3
 dill
 python-dateutil
 matplotlib
