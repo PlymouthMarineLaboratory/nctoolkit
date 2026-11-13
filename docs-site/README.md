@@ -14,7 +14,7 @@ for a consistent look across PML's Marine Systems Modelling group tools.
 index.html            Landing page
 installing.html         \
 quickstart.html           \
-guide.html                  Card-grid index for the User Guide (16 topics)
+guide.html                  Card-grid index for the User Guide (17 topics)
 datasets.html                \
 exporting.html                 \
 visualization.html               \
@@ -58,7 +58,7 @@ archive/             Per-release snapshots of the pages above (minus
 ```
 
 The header nav's "Guide" item is a single link to `guide.html`, not a
-dropdown — with 16 subpages a dropdown menu doesn't scale, so discovery goes
+dropdown — with 17 subpages a dropdown menu doesn't scale, so discovery goes
 through the card grid instead (and each subpage's breadcrumb reads
 `Home / User Guide / <page>`, linking back to `guide.html`). Only "Data" and
 "About" still use the `nav-dropdown` component (2-3 items each, where a
@@ -266,7 +266,7 @@ corresponding `.html` file(s) directly. Shared header/nav/footer markup is
 duplicated across pages (no static-site generator), so a nav or footer change
 should be applied to all 27 `.html` files.
 
-The User Guide (`guide.html` plus its 16 subpages) mirrors the "User Guide"
+The User Guide (`guide.html` plus its 17 subpages) mirrors the "User Guide"
 section of `docs/source/index.rst`'s toctree 1:1, same order, one page per
 topic — this was a deliberate rewrite from an earlier three-page
 `guide-basics.html` / `guide-analysis.html` / `guide-advanced.html` layout
@@ -295,6 +295,7 @@ Rough mapping from Sphinx source to site pages:
 | `matchpoint.ipynb`                                                   | `matchpoint.html`        |
 | `variables.rst`                                                      | `variables.html`         |
 | `verticals.ipynb`                                                    | `verticals.html`         |
+| `fvcom.rst`                                                          | `fvcom.html`             |
 | `adding.ipynb`                                                       | `adding.html`            |
 | `parallel.rst`                                                       | `parallel.html`          |
 | `hacks.rst`                                                          | `hacks.html`             |

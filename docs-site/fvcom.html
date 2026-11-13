@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FVCOM Output — NCToolkit User Guide</title>
+<meta name="description" content="Opening FVCOM output with NCToolkit: the unstructured mesh, sigma layers and layer thickness, vertical methods, and regridding.">
+<link rel="icon" type="image/svg+xml" href="assets/img/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container nav">
+    <a class="brand" href="index.html">
+      <img src="assets/img/nctoolkit_wordmark.svg" alt="NCToolkit">
+      <span id="nctoolkit-docs-version" class="brand-version">v&hellip;</span>
+    </a>
+    <nav class="nav-links" id="nav-links">
+      <a href="installing.html" data-page="installing.html">Install</a>
+      <a href="quickstart.html" data-page="quickstart.html">Quickstart</a>
+      <a href="guide.html" data-page="guide.html">Guide</a>
+      <a href="gallery.html" data-page="gallery.html">Gallery</a>
+      <a href="api.html" data-page="api.html">API</a>
+      <a href="data-formats.html" data-page="data-formats.html">Data supported</a>
+      <a href="qa.html" data-page="qa.html">Q&amp;A</a>
+      <a href="cheatsheet.html" data-page="cheatsheet.html">Cheat Sheet</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle" aria-expanded="false">About
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="nav-dropdown-menu">
+          <a href="about.html" data-page="about.html">About &amp; citation<small>Project background, how to cite</small></a>
+          <a href="version-history.html" data-page="version-history.html">Version history<small>Archived documentation snapshots</small></a>
+        </div>
+      </div>
+    </nav>
+    <div class="nav-actions">
+      <a class="icon-btn" href="https://github.com/PlymouthMarineLaboratory/nctoolkit" target="_blank" rel="noopener" aria-label="NCToolkit on GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 .5C5.73.5.5 5.74.5 12.09c0 5.08 3.29 9.38 7.86 10.9.57.1.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.26-1.28-5.26-5.71 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.64 1.59.24 2.76.12 3.05.74.8 1.18 1.83 1.18 3.09 0 4.44-2.7 5.42-5.28 5.7.42.36.78 1.08.78 2.17 0 1.57-.01 2.83-.01 3.22 0 .3.21.66.8.55A10.6 10.6 0 0 0 23.5 12.1C23.5 5.74 18.27.5 12 .5Z"/></svg>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle menu" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+
+<div class="page-hero">
+  <div class="container">
+    <div class="breadcrumb"><a href="index.html">Home</a> / <a href="guide.html">User Guide</a> / FVCOM output</div>
+    <h1>FVCOM output</h1>
+  </div>
+</div>
+
+<div class="container docs-layout">
+  <aside class="docs-toc">
+    <div class="docs-toc-title">On this page</div>
+    <ul>
+      <li><a href="#opening">Opening FVCOM output</a></li>
+      <li><a href="#vertical">Vertical methods</a></li>
+      <li><a href="#spatial">Spatial averages and regridding</a></li>
+      <li><a href="#unsupported">Methods that do not work</a></li>
+    </ul>
+  </aside>
+
+  <div class="docs-content">
+
+    <h2 id="opening">Opening FVCOM output</h2>
+    <p>To work with FVCOM model output use <code>open_fvcom</code>. Raw FVCOM output is not compatible with NCtoolkit's computational backend CDO. The <code>open_fvcom</code> function will convert the raw data to a format that is. By default, all the variables on the nodes of the mesh (and on the sigma layers, or with no vertical axis) are opened.</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre><span class="tok-kw">import</span> nctoolkit <span class="tok-kw">as</span> nc
+
+ds = nc.open_fvcom(<span class="tok-str">"fvcom_0001.nc"</span>)</pre>
+    </div>
+    <p>In cases where you only want to analyse a subset of data it is better to specify this when you open the data. You can do this as follows:</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre>ds = nc.open_fvcom(<span class="tok-str">"fvcom_0001.nc"</span>, variables=[<span class="tok-str">"temp"</span>, <span class="tok-str">"salinity"</span>])</pre>
+    </div>
+    <p>You can pass a list of files or a wildcard. Each FVCOM file becomes one file in the dataset:</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre>ds = nc.open_fvcom(<span class="tok-str">"output/*.nc"</span>, variables=<span class="tok-str">"temp"</span>)</pre>
+    </div>
+    <div class="callout">
+      <div class="callout-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        How does open_fvcom work?
+      </div>
+      <p>It opens the raw netCDF data and then converts it to a new netCDF file that has coordinates and vertical thickness for each cell, based on the sigma layer information.</p>
+      <p>Internally, the dataset tracks what is what, and methods such as <code>vertical_mean</code> automatically identify the vertical thickness of cells for their calculations.</p>
+    </div>
+
+    <p>The variables you request must all live on the same part of the mesh. Node variables (e.g. <code>temp</code>, <code>salinity</code>, <code>zeta</code>) can be opened together, and so can element variables (e.g. <code>u</code>, <code>v</code>, <code>ua</code>). To work with both, open them separately. Element variables such as <code>u</code> and <code>v</code> are never opened by default, so request them explicitly:</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre>ds = nc.open_fvcom(<span class="tok-str">"fvcom_0001.nc"</span>, variables=[<span class="tok-str">"u"</span>, <span class="tok-str">"v"</span>])</pre>
+    </div>
+
+    <p>Opening puts the data on a grid that CDO understands:</p>
+    <ul>
+      <li>Each node or element is a grid cell with its true area. Node cells are FVCOM's own control volumes (areas stored as <code>art1</code>), and element cells are their triangles.</li>
+      <li>The sigma layers become vertical levels, numbered from 1 at the surface.</li>
+      <li>The thickness of each layer, <code>(siglev[k] - siglev[k + 1]) * (h + zeta)</code>, is added as a variable called <code>layer_thickness</code>. It changes with the free surface at each time step.</li>
+    </ul>
+    <p>Two dataset attributes record this:</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre>ds.fvcom            <span class="tok-com"># True</span>
+ds.fvcom_thickness  <span class="tok-com"># "layer_thickness"</span></pre>
+    </div>
+
+    <h2 id="vertical">Vertical methods</h2>
+    <p>The vertical methods use the layer thickness automatically, so you do not need to supply <code>thickness</code> or <code>fixed</code>:</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre>ds.vertical_mean()                       <span class="tok-com"># thickness-weighted depth average</span>
+ds.vertical_integration()                <span class="tok-com"># depth integral</span>
+ds.vertical_mean(depth_range=[<span class="tok-num">0</span>, <span class="tok-num">20</span>])    <span class="tok-com"># the top 20 m</span>
+ds.vertical_interp([<span class="tok-num">5</span>, <span class="tok-num">10</span>, <span class="tok-num">50</span>])          <span class="tok-com"># values at fixed depths below the surface</span>
+ds.top()                                 <span class="tok-com"># the surface layer</span>
+ds.bottom()                              <span class="tok-com"># the bottom layer</span></pre>
+    </div>
+    <p>When interpolating to fixed depths, depths above the centre of the top layer take the top layer's value. Depths between the centre of the bottom layer and the seabed take the bottom layer's value. Depths below the seabed are missing.</p>
+    <p>The layer thickness must stay in the dataset. If you select variables, keep it:</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre>ds.subset(variables=[<span class="tok-str">"temp"</span>, <span class="tok-str">"layer_thickness"</span>])</pre>
+    </div>
+    <p>Arithmetic with a constant, e.g. <code>ds.add(1)</code>, also changes the layer thickness.</p>
+
+    <h2 id="spatial">Spatial averages and regridding</h2>
+    <p>Every cell has its true area, so spatial statistics are area weighted:</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre>ds.spatial_mean()
+ds.crop(lon=[-<span class="tok-num">6</span>, -<span class="tok-num">4</span>], lat=[<span class="tok-num">50</span>, <span class="tok-num">51</span>])
+ds.cell_area()</pre>
+    </div>
+    <p>Regridding computes weights on the mesh itself. The <code>bil</code> method (the default) interpolates linearly within the mesh's triangles. <code>nn</code> takes the nearest node, or the element a point falls in. Places outside the mesh are missing, as are places next to missing values.</p>
+    <div class="code-block">
+      <div class="code-card__bar"><div class="code-card__dots"><span></span><span></span><span></span></div><span class="code-card__label">python</span></div>
+      <pre>ds.to_latlon(lon=[-<span class="tok-num">10</span>, -<span class="tok-num">2</span>], lat=[<span class="tok-num">48</span>, <span class="tok-num">57</span>], res=<span class="tok-num">0.05</span>)
+ds.regrid(grid_ds)
+ds.to_transect(start=[-<span class="tok-num">6</span>, <span class="tok-num">50</span>], end=[-<span class="tok-num">4</span>, <span class="tok-num">51</span>])
+ds.match_points(df)</pre>
+    </div>
+    <p><code>con</code>, <code>con2</code>, <code>laf</code> and <code>dis</code> are also available. Once regridded, the data is no longer on the FVCOM mesh, so <code>ds.fvcom</code> is <code>False</code>. The vertical methods still use the layer thickness.</p>
+
+    <div class="callout warn" id="unsupported">
+      <div class="callout-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Methods that do not work with FVCOM data
+      </div>
+      <p>These methods need a regular grid, or make no sense on the mesh. They raise an error saying they do not work with FVCOM data. If you need them, regrid the data first, e.g. with <code>to_latlon</code>.</p>
+      <ul>
+      <li><code>zonal_mean</code>, <code>zonal_sum</code>, <code>zonal_min</code>, <code>zonal_max</code>, <code>zonal_range</code></li>
+      <li><code>meridonial_mean</code>, <code>meridonial_min</code>, <code>meridonial_max</code>, <code>meridonial_range</code></li>
+      <li><code>box_mean</code>, <code>box_sum</code>, <code>box_min</code>, <code>box_max</code>, <code>box_range</code></li>
+      <li><code>resample_grid</code>, <code>distribute</code></li>
+      <li><code>invert("latitudes")</code></li>
+      <li><code>strip_variables</code>, which would remove the mesh's coordinates</li>
+      <li><code>set_gridtype</code>, <code>fix_amm7_grid</code>, <code>fix_nemo_ersem_grid</code></li>
+      <li><code>generate_level_bounds</code>, and <code>vertical_mean</code>/<code>vertical_integration</code>/<code>vertical_interp</code> with <code>fixed=True</code></li>
+      <li><code>crop</code> with <code>nco=True</code></li>
+    </ul>
+      <p>All other methods work as they do for any other data.</p>
+    </div>
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="container footer-pml">
+    <a href="https://pml.ac.uk/" target="_blank" rel="noopener"><img src="assets/img/pml_logo.jpg" alt="Plymouth Marine Laboratory"></a>
+    <span>Developed by the <a href="https://pml.ac.uk/sciencetopics/environmental-intelligence/" target="_blank" rel="noopener">Environmental Intelligence group</a> at <a href="https://pml.ac.uk/" target="_blank" rel="noopener">Plymouth Marine Laboratory</a></span>
+  </div>
+  <div class="container footer-top">
+    <div class="footer-brand">
+      <img src="assets/img/nctoolkit_wordmark.svg" alt="NCToolkit">
+      <p>A comprehensive Python package for netCDF analysis and post-processing. Subset, compute, and visualize &mdash; in a few lines of code.</p>
+      <div class="footer-social">
+        <a href="https://github.com/PlymouthMarineLaboratory/nctoolkit" target="_blank" rel="noopener" aria-label="GitHub">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 .5C5.73.5.5 5.74.5 12.09c0 5.08 3.29 9.38 7.86 10.9.57.1.79-.25.79-.55 0-.27-.01-1.17-.02-2.12-3.2.7-3.88-1.36-3.88-1.36-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.56-.29-5.26-1.28-5.26-5.71 0-1.26.45-2.29 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.64 1.59.24 2.76.12 3.05.74.8 1.18 1.83 1.18 3.09 0 4.44-2.7 5.42-5.28 5.7.42.36.78 1.08.78 2.17 0 1.57-.01 2.83-.01 3.22 0 .3.21.66.8.55A10.6 10.6 0 0 0 23.5 12.1C23.5 5.74 18.27.5 12 .5Z"/></svg>
+        </a>
+        <a href="mailto:rwi@pml.ac.uk" aria-label="Email">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+        </a>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Documentation</h4>
+      <ul>
+        <li><a href="installing.html">Installing</a></li>
+        <li><a href="quickstart.html">Quickstart</a></li>
+        <li><a href="guide.html">User Guide</a></li>
+        <li><a href="gallery.html">Gallery</a></li>
+        <li><a href="api.html">API reference</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Reference</h4>
+      <ul>
+        <li><a href="api.html">API reference</a></li>
+        <li><a href="data-formats.html">Supported data</a></li>
+        <li><a href="backends.html">CDO &amp; NCO backends</a></li>
+        <li><a href="qa.html">Q&amp;A</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Project</h4>
+      <ul>
+        <li><a href="about.html">About &amp; citation</a></li>
+        <li><a href="news.html">Changelog</a></li>
+        <li><a href="version-history.html">Version history</a></li>
+        <li><a href="https://github.com/PlymouthMarineLaboratory/nctoolkit" target="_blank" rel="noopener">GitHub repository</a></li>
+        <li><a href="https://github.com/PlymouthMarineLaboratory/nctoolkit/issues" target="_blank" rel="noopener">Report an issue</a></li>
+        <li><a href="https://anaconda.org/conda-forge/nctoolkit" target="_blank" rel="noopener">conda-forge package</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <span>&copy; 2026 <a href="https://pml.ac.uk/" target="_blank" rel="noopener">Plymouth Marine Laboratory</a>. Released under the GNU GPLv3 license.</span>
+    <span>Built by ocean and climate modellers, for netCDF users everywhere.</span>
+  </div>
+</footer>
+
+<button class="back-to-top" aria-label="Back to top">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+</button>
+
+<script src="assets/js/main.js"></script>
+</body>
+</html>
