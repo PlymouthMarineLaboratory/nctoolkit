@@ -7,17 +7,20 @@ CDO cannot read FVCOM files directly, so nctoolkit has a dedicated function for 
 Opening FVCOM output
 -----------------------
 
-FVCOM files often hold hundreds of variables, so you must say which ones you want:
+By default all the variables on the nodes of the mesh (and on the sigma layers, or with no vertical axis) are opened.
+A warning lists the variables that were left out, as they cannot share a grid with these.
+You can instead say which variables you want:
 
 .. code:: ipython3
 
     import nctoolkit as nc
+    ds = nc.open_fvcom("fvcom_0001.nc")
     ds = nc.open_fvcom("fvcom_0001.nc", variables=["temp", "salinity"])
 
 You can give a list of files or a wildcard, e.g. ``nc.open_fvcom("output/*.nc", "temp")``. Each FVCOM file becomes one file in the dataset.
 
-The variables you ask for must all be on the nodes of the mesh (e.g. ``temp``, ``salinity``, ``zeta``) or all be on the elements (e.g. ``u``, ``v``, ``ua``).
-To work with both, open them separately.
+The variables you supply must all be on the nodes of the mesh (e.g. ``temp``, ``salinity``, ``zeta``) or all be on the elements (e.g. ``u``, ``v``, ``ua``).
+To work with both, open them separately. Element variables such as ``u`` and ``v`` are never opened by default, so supply them, e.g. ``variables=["u", "v"]``.
 
 ``open_fvcom`` puts the data on a grid that CDO understands:
 
@@ -100,6 +103,5 @@ They raise an error saying they do not work with FVCOM data. Regrid the data fir
 * ``set_gridtype``, ``fix_amm7_grid``, ``fix_nemo_ersem_grid``
 * ``generate_level_bounds``, and ``vertical_mean``/``vertical_integration``/``vertical_interp`` with ``fixed=True``
 * ``crop`` with ``nco=True``
-* ``plot``: use ``pub_plot`` instead, which draws the mesh's cells
 
 All other methods work as they do for any other data.

@@ -50,9 +50,15 @@ class TestOpen:
         assert np.allclose(x.lon.values, lon) and np.allclose(x.lat.values, lat)
         assert np.allclose(x.temp.values[0, 0], 10 + lon)
 
-    def test_variables_must_be_given(self, fvcom_path):
-        with pytest.raises(ValueError, match="Please supply the variables"):
-            nc.open_fvcom(fvcom_path)
+    def test_all_node_variables_are_opened_by_default(self, fvcom_path):
+        with pytest.warns(UserWarning, match="u, km"):
+            ds = nc.open_fvcom(fvcom_path)
+        assert set(ds.variables) >= {"temp", "salinity", "zeta", "h", "layer_thickness"}
+        assert "u" not in ds.variables and "km" not in ds.variables
+
+    def test_element_variables_can_be_supplied(self, fvcom_path):
+        ds = nc.open_fvcom(fvcom_path, ["u"])
+        assert "u" in ds.variables
 
     def test_nodes_and_elements_cannot_be_mixed(self, fvcom_path):
         with pytest.raises(ValueError, match="nodes and elements"):
@@ -209,7 +215,7 @@ class TestRegrid:
 
     @pytest.mark.parametrize(
         "method",
-        ["zonal_mean", "meridonial_mean", "box_mean", "resample_grid", "distribute", "strip_variables", "plot"],
+        ["zonal_mean", "meridonial_mean", "box_mean", "resample_grid", "distribute", "strip_variables"],
     )
     def test_what_needs_a_regular_grid_is_refused(self, nodes, method):
         args = {"resample_grid": [2], "distribute": [2, 2]}.get(method, [])

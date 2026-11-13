@@ -403,6 +403,35 @@ def _check_variables(handle, variables):
     return list(locations.values())[0], (list(axes)[0] if len(axes) == 1 else None)
 
 
+def _default_variables(handle):
+    """
+    The variables opened when none are given: every data variable on the nodes
+    that is on the sigma layers or has no vertical axis. Returns these and the
+    data variables that cannot go in the same Dataset
+    """
+    kept, skipped = [], []
+    for name, var in handle.variables.items():
+        if name in MESH_VARIABLES or name == THICKNESS:
+            continue
+        try:
+            location = _location(handle, name)
+        except ValueError:
+            continue
+        others = [d for d in var.dimensions if d not in ["time", SIGLAY, SIGLEV, NODE, NELE]]
+        if len(others) > 0:
+            skipped.append(name)
+        elif location == NODE and _vertical(handle, name) in [SIGLAY, None]:
+            kept.append(name)
+        else:
+            skipped.append(name)
+    if len(kept) == 0:
+        raise ValueError(
+            "There are no variables on the nodes of the FVCOM mesh to open. "
+            "Please supply the variables, e.g. variables = ['u', 'v']"
+        )
+    return kept, skipped
+
+
 def convert_file(path, variables, out, mesh=None, bounds=None, thickness=True):
     """
     Write the variables of the FVCOM file at path to out, a netCDF file CDO
@@ -569,10 +598,13 @@ def open_fvcom(x=None, variables=None, thickness=True):
     x : str or list
         An FVCOM file, a list of them or a wildcard, e.g. "output/*.nc".
     variables : str or list
-        The variable or variables to extract. This must be supplied, as FVCOM files
-        can hold hundreds of variables and converting them all would be slow.
-        Variables must all be on the nodes (e.g. temp, salinity) or all be on the
-        elements (e.g. u, v) of the mesh.
+        The variable or variables to extract. Defaults to None, which means every
+        variable on the nodes of the mesh that is on the sigma layers or has no
+        vertical axis (e.g. temp, salinity, zeta, h). A warning lists any variables
+        left out, i.e. those on the elements (e.g. u, v) or the sigma levels (e.g. km).
+        Supply these explicitly to open them. A Dataset has a single grid, so
+        supplied variables must all be on the nodes or all be on the elements, and
+        all be on the sigma layers or all on the sigma levels.
     thickness : bool
         Add the thickness of each sigma layer, (siglev[k] - siglev[k + 1]) * (h + zeta),
         as a variable? Defaults to True. Its name is in the Dataset's fvcom_thickness
@@ -586,25 +618,22 @@ def open_fvcom(x=None, variables=None, thickness=True):
     ------------
 
     >>> import nctoolkit as nc
+    >>> ds = nc.open_fvcom("fvcom_0001.nc")
     >>> ds = nc.open_fvcom("fvcom_0001.nc", variables=["temp", "salinity"])
     >>> ds.vertical_mean()
     >>> ds.to_latlon(lon=[-10, -2], lat=[48, 57], res=0.05)
     """
     from nctoolkit.api import DataSet
 
-    if variables is None:
-        raise ValueError(
-            "Please supply the variables to extract from the FVCOM files, e.g. variables = ['temp', 'salinity']. "
-            "Converting every variable would be slow"
-        )
-    if isinstance(variables, str):
-        variables = [variables]
-    if not isinstance(variables, (list, tuple)) or len(variables) == 0:
-        raise TypeError("variables must be a str or a list of str")
-    for vv in variables:
-        if not isinstance(vv, str):
+    if variables is not None:
+        if isinstance(variables, str):
+            variables = [variables]
+        if not isinstance(variables, (list, tuple)) or len(variables) == 0:
             raise TypeError("variables must be a str or a list of str")
-    variables = list(dict.fromkeys(variables))
+        for vv in variables:
+            if not isinstance(vv, str):
+                raise TypeError("variables must be a str or a list of str")
+        variables = list(dict.fromkeys(variables))
     if not isinstance(thickness, bool):
         raise TypeError("thickness must be True or False")
 
@@ -613,6 +642,14 @@ def open_fvcom(x=None, variables=None, thickness=True):
     paths = _paths(x)
 
     with netCDF4.Dataset(paths[0]) as src:
+        if variables is None:
+            variables, skipped = _default_variables(src)
+            if len(skipped) > 0:
+                warnings.warn(
+                    "No variables were given, so all those on the nodes and sigma layers of the FVCOM "
+                    f"mesh were opened. These were not: {', '.join(skipped)}. "
+                    "To open them, supply them with variables, e.g. variables = ['u', 'v']"
+                )
         location, axis = _check_variables(src, variables)
         mesh = read_mesh(src)
     bounds = mesh.bounds(location)
